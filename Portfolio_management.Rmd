@@ -1,0 +1,472 @@
+---
+title: "Portfolio Management"
+author: "Gohar Aleksanyan"
+date: "2026-06-01"
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                        warning = FALSE,
+                        message = FALSE)
+```
+
+
+
+In this project we consider a theoretical portfolio of six stocks from the US capital market, with the market index S&P 500, and analyse based on weekly data over ten years. In order to perform the analysis we  will use the following libraries in R:
+```{r}
+library(tidyverse) ## for data wrangling
+library(tidyquant) ## for downloading stock prices
+library(MASS)  ## for fitting distributions
+library(ggplot2)  ## for plots
+```
+
+We consider a portfolio of the following six stocks:
+
+- Apple Inc. (AAPL)
+- Intel Corp (INTC)
+- Norwegian Cruise Line Holdings Ltd. (NCLH)
+- Pfizer Inc. (PFE)
+- Boeing Co (BA)
+- Mondelez International (MDLZ) 
+
+```{r my_stocks}
+my_stocks <- c(
+  "AAPL",
+  "INTC",
+  "NCLH",
+  "PFE",
+  "BA",
+  "MDLZ",
+  "^GSPC"
+)
+
+apple <- tq_get(
+  "AAPL",
+  get  = "stock.prices",
+  from = "2016-05-11",
+  to = "2026-05-11",
+  periodicity = "weekly"
+)
+write.csv(apple, "apple_prices.csv", row.names = FALSE)
+
+intel <- tq_get(
+  "INTC",
+  get  = "stock.prices",
+  from = "2016-05-11",
+  to = "2026-05-11",
+  periodicity = "weekly"
+)
+write.csv(intel, "intel_prices.csv", row.names = FALSE)
+
+NOcruise <- tq_get(
+  "NCLH",
+  get  = "stock.prices",
+  from = "2016-05-11",
+  to = "2026-05-11",
+  periodicity = "weekly"
+)
+write.csv(NOcruise, "NOcruise_prices.csv", row.names = FALSE)
+
+
+pfizer <- tq_get(
+  "PFE",
+  get  = "stock.prices",
+  from = "2016-05-11",
+  to = "2026-05-11",
+  periodicity = "weekly"
+)
+write.csv(pfizer, "pfizer_prices.csv", row.names = FALSE)
+
+
+boeing <- tq_get(
+  "BA",
+  get  = "stock.prices",
+  from = "2016-05-11",
+  to = "2026-05-11",
+  periodicity = "weekly"
+)
+write.csv(boeing, "boeing_prices.csv", row.names = FALSE)
+
+mondelez <- tq_get(
+  "MDLZ",
+  get  = "stock.prices",
+  from = "2016-05-11",
+  to = "2026-05-11",
+  periodicity = "weekly"
+)
+write.csv(mondelez, "mondelez_prices.csv", row.names = FALSE)
+
+sp500 <- tq_get(
+  "^GSPC",
+  get  = "stock.prices",
+  from = "2016-05-11",
+  to   = "2026-05-11",
+  periodicity = "weekly"
+)
+
+write.csv(sp500, "sp500_prices.csv", row.names = FALSE)
+```
+
+
+Let us denote the respective stock prices by $S_1$ (AAPL), $S_2$ (INTC), $S_3$ (NCLH), $S_4$ (PFE),  $S_5$ (BA) and $S_6$ (MDLZ).
+First we compute the simple returns 
+$$K_i(n)= \frac{S_i(n)-S_i(n-1)}{S_i(n-1)}, \textrm{ for } i=1,...,6$$
+
+```{r simple returns}
+# Create a matrix with the adjusted prices for our stocks
+my_stocks <- data.frame(
+  AAPL = apple$adjusted,
+  INTC = intel$adjusted,
+  NCLH = NOcruise$adjusted,
+  PFE  = pfizer$adjusted,
+  BA   = boeing$adjusted,
+  MDLZ = mondelez$adjusted
+)
+
+# Compute simple returns K_i
+simple_returns <- (my_stocks[-1, ] - my_stocks[-nrow(my_stocks), ]) /
+            my_stocks[-nrow(my_stocks), ]
+
+
+```
+
+Let us denote the expected returns on given stocks by $\mu_i:= \mathbb{E}(K_i)$, for $i=1,...,6$, and by $c_{ij}:= Cov(K_i,K_j)$ the covariance between the returns. Next we estimate the mean vector $\textbf{m}:=[\mu_1,.., \mu_6]$ and the covariance matrix $\textbf{C}:=(c_{ij})_{6\times 6}$ for our stocks;
+
+```{r mu and Cov_matrix}
+# mean return vector
+mean_vector <- colMeans(simple_returns)
+mean_vector
+
+# cov_matrix
+cov_matrix <- cov(simple_returns)
+cov_matrix
+```
+We see that Apple and Intel have the highest values of average simple return, respectively $\approx 0.0058$ and $\approx 0.0048$.
+Next we compare these values with the simple returns of the market index. 
+
+```{r market index}
+# market index prices
+market_prices <- sp500$adjusted
+
+# Simple market returns
+market_returns <- (market_prices[-1] - market_prices[-length(market_prices)]) /
+                   market_prices[-length(market_prices)]
+
+# Mean market return
+mean(market_returns)
+
+# Market variance
+var(market_returns)
+
+```
+
+We see that the tech companies and Boeing in our theoretical portfolio have higher average returns than the index market.
+
+
+
+
+**Minimum variance portfolio**
+
+Let $w_1$,..., $w_6$ denote the respective weights of our stocks in a portfolio, and denote $\textbf{w}:=[w_1,...,w_6]$ the one row matrix of weights, satisfying $w_1+w_2+...+w_6=1$.
+
+In the next step we calculate the weights of the minimum variance portfolio,
+$$
+\textbf{w}_{min}=\frac{u C^{-1}} {u C^{-1} u^T}, \textrm{ where } u=[1,1,1,1,1,1]
+$$
+(Proposition 5.9 p 109, Capinski, Zastawniak, 2004).
+
+```{r }
+u <- matrix(c(1,1,1,1,1,1), nrow = 1)
+
+# Inverse covariance matrix
+C_inv <- solve(cov_matrix)
+
+# Minimum variance weights
+w_min <- (u %*% C_inv) /
+         as.numeric(u %*% C_inv %*% t(u))
+
+# Convert to table
+w_min <- data.frame(
+  Stock = colnames(cov_matrix),
+  Weight = as.vector(w_min)
+)
+
+w_min
+
+```
+
+
+Hence the portfolio with the smallest variance in the attainable set has weights
+$$
+\textbf{w}_{min} \approx [0.186, 0.045, 0.009, 0.297, -0.032, 0.495]
+$$
+where Mondelez has the largest weight, Pfizer has the second largest, and Apple the third largest,  while Boeing has a negative weight.  
+
+**Market portfolio**
+We consider a simplified market model, consisting of our six stocks and a risk-free security with a given return $r_F$.
+Below we compute the weights of the market portfolio $\textbf{w}_M$, assuming that 
+the risk-free rate $r_F=2 \%$ per year using continuous compounding.
+In the market portfolio the weights of risky securities are equal to their relative share in the whole market.
+
+The weights of the market portfolio belong to the efficient frontier, and by Proposition 5.12 (pp. 116-117, Capinski, Zastawniak, 2004),  satisfy 
+$$
+\gamma \mathbb{w}_M \textbf{C} =\textbf{m} - \mu \textbf{u},
+$$
+
+for some real numbers $\gamma > 0$ and $\mu$. Hence 
+$$
+\gamma \mathbb{w}_M=(\textbf{m} - \mu \textbf{u}) \textbf{C}^{-1}. 
+$$
+
+In the formula above, $\mu$ is the weekly risk-free rate corresponding to the annual continuously compounded interest rate $r_F=2 \%$.
+
+On the other hand, the sum of the weights in the market portfolio is 1, or equivalently; $\textbf{u} \textbf{w}^T= 1$, allowing us to calculate the weights explicitly;
+
+```{r}
+u <- matrix(c(1,1,1,1,1,1), nrow = 1)
+m <- matrix(mean_vector, nrow = 1)
+
+# Weekly risk-free rate
+mu <- exp(0.02 / 52) - 1
+
+# Inverse covariance matrix
+C_inv <- solve(cov_matrix)
+
+# Unscaled market portfolio
+w_raw <- (m - mu * u) %*% C_inv
+
+# Normalize so weights sum to 1
+w_M <- w_raw / sum(w_raw)
+
+# Convert to table
+w_M <- data.frame(
+  Stock = colnames(cov_matrix),
+  Weight = as.vector(w_M)
+)
+
+w_M
+```
+
+
+Thus we obtain the weights of market portfolio;
+$$
+\textbf{w}_M \approx [1.126, 0.186, -0.178, -0.248, 0.097, 0.016]
+$$
+
+The market portfolio looks very different from the minimum variance portfolio. Now Apple has the largest weight in the portfolio, while we have a short position in Pfizer and Norwegian cruise stocks. 
+
+
+**Minimum variance line**
+Using the minimum variance portfolio and the market portfolio, we now generate portfolios belonging to the minimum variance line. By  Proposition 5.11 (pp. 115-116, Capinski, Zastawniak, 2004), any portfolio on the minimum variance line can be written as
+$$
+\textbf{w} = s\textbf{w}_{min} +(1-s)\textbf{w}_M, \quad s \in \mathbb R
+$$
+We compute optimal portfolios for $s \in [-2,2]$ with step size $0.1$.
+
+```{r optimal_portfolios}
+# Convert weights to vectors
+wmin_vec <- as.numeric(w_min$Weight)
+wM_vec   <- as.numeric(w_M$Weight)
+
+# Values of s
+s_values <- seq(-2, 2, by = 0.1)
+
+# Matrix to store portfolios
+portfolio_weights <- matrix(
+  nrow = length(s_values),
+  ncol = 6
+)
+
+# Generate portfolios
+for(i in 1:length(s_values)) {
+
+  s <- s_values[i]
+
+  portfolio_weights[i, ] <-
+    s * wmin_vec + (1 - s) * wM_vec
+}
+
+# Column names
+colnames(portfolio_weights) <-
+  c("AAPL", "INTC", "NCLH", "PFE", "BA", "MDLZ")
+
+portfolio_weights <- data.frame(
+  s = s_values,
+  portfolio_weights
+)
+
+# Display some portfolios
+head(portfolio_weights)
+```
+
+
+
+
+
+Let us recall that for a portfolio with weights $\textbf{w}$ the expected return $\mu$ and the standard deviation $\sigma$ are given by
+$$
+\mu= \textbf{ w} \textbf{m}^T, \quad \sigma=\sqrt{\textbf{w}\textbf{C} \textbf{w}^T}.
+$$
+
+Next we plot the portfolios constructed in the previous step, as well as the portfolios consisting of each stock, the minimum variance portfolio and  the market portfolio in standard deviation mean space $(\sigma, \mu)$.
+
+```{r plotting_portfolios}
+
+# Store portfolio means and standard deviations
+portfolio_mean <- c()
+portfolio_sd <- c()
+
+# Compute statistics for all portfolios
+for(i in 1:nrow(portfolio_weights)) {
+
+  w <- as.numeric(portfolio_weights[i, -1])
+
+  # Portfolio mean
+  mu_p <- sum(w * mean_vector)
+
+  # Portfolio standard deviation
+  sigma_p <- sqrt(t(w) %*% cov_matrix %*% w)
+
+  portfolio_mean[i] <- mu_p
+  portfolio_sd[i] <- sigma_p
+}
+
+# Individual stock statistics
+stock_mean <- mean_vector
+stock_sd <- apply(simple_returns, 2, sd)
+
+# Minimum variance portfolio statistics
+wmin_vec <- as.numeric(w_min$Weight)
+
+mu_min <- sum(wmin_vec * mean_vector)
+
+sd_min <- sqrt(t(wmin_vec) %*% cov_matrix %*% wmin_vec)
+
+# Market portfolio statistics
+wM_vec <- as.numeric(w_M$Weight)
+
+mu_M <- sum(wM_vec * mean_vector)
+
+sd_M <- sqrt(t(wM_vec) %*% cov_matrix %*% wM_vec)
+
+# Plot
+plot(
+  portfolio_sd,
+  portfolio_mean,
+  col = "grey",
+  pch = 16,
+  xlab = "Standard deviation",
+  ylab = "Mean return,",
+  main = "Mean-Variance Diagram"
+)
+
+# Add individual stocks
+points(stock_sd, stock_mean,
+       col = "red",
+       pch = 17)
+
+text(stock_sd, stock_mean,
+     labels = names(stock_mean),
+     pos = 4)
+
+# Add minimum variance portfolio
+points(sd_min, mu_min,
+       col = "blue",
+       pch = 18,
+       cex = 1.5)
+
+text(sd_min, mu_min,
+     labels = "MVP",
+     pos = 4)
+
+# Add market portfolio
+points(sd_M, mu_M,
+       col = "purple",
+       pch = 18,
+       cex = 1.5)
+
+text(sd_M, mu_M,
+     labels = "Market",
+     pos = 4)
+```
+
+
+The grey points in the figure correspond to the portfolios constructed in the previous step, and belong to the Markowitz bullet in the standard deviation–mean space.
+
+The red points correspond to the individual stocks in the portfolio. We observe, for example, that the Pfizer stock has both the lowest mean return and the lowest standard deviation. In contrast, Apple stock has the highest mean return together with a relatively moderate standard deviation, placing it close to the efficient frontier. 
+
+The blue point represents the minimum variance portfolio (MVP), while the purple point corresponds to the market portfolio, both of which lie on the efficient frontier.
+
+**Beta coefficient**
+
+The beta coefficient of an asset measures the sensitivity of the asset’s returns to movements in the market portfolio over the risk-free rate. Equivalently, beta is the slope coefficient of the best-fit line in a linear regression model relating the returns of the asset to the returns of the market portfolio.
+
+As in previous step, we assume that the risk-free rate $r=2 \%$ per year in continuous compounding. 
+First we compute the $\beta$ factor for each stock following the Capital Asset Pricing Model (CAPM);
+$$
+\beta_i =\frac{Cov(K_i, K_M)}{\sigma_M^2}, \quad i=1, ..., 6,
+$$
+where the market is defined by our six stocks and a risk-free security.
+
+```{r CAPM_beta_6assets}
+# Market portfolio weights
+wM_vec <- as.numeric(w_M$Weight)
+
+# Returns of theoretical market portfolio
+market_portfolio_returns <-
+  as.matrix(simple_returns) %*% wM_vec
+
+# CAPM betas
+beta_CAPM <- c()
+
+for(i in 1:ncol(simple_returns)) {
+
+  beta_CAPM[i] <-
+    cov(simple_returns[, i],
+        market_portfolio_returns) /
+    var(market_portfolio_returns)
+}
+
+# Results
+beta_CAPM <- data.frame(
+  Stock = colnames(simple_returns),
+  Beta_CAPM = beta_CAPM
+)
+
+beta_CAPM
+
+```
+
+
+
+Next we calculate beta for each stock based on the S&P 500 index.
+```{r SP500-beta}
+# Empirical betas using S&P500 index
+beta_index <- c()
+
+for(i in 1:ncol(simple_returns)) {
+
+  beta_index[i] <-
+    cov(simple_returns[, i],
+        market_returns) /
+    var(market_returns)
+}
+
+# Results
+beta_index <- data.frame(
+  Stock = colnames(simple_returns),
+  Beta_Index = beta_index
+)
+
+beta_index
+
+```
+
+We notice that the values for beta for our stocks with respect to 
+S&P 500- index are different from values obtained in the theoretical CAPM model. For example, let us observe that, for Boeing we got $\beta_5 \approx 0.45$ for our market model, while $\beta \approx 1.76$ with respect to the market index S&P 500.
+
+The two beta calculations differ because the underlying market portfolios are different. The  theoretical portfolio discussed in this project is limited to 6 assets, the S&P 500 is much broader and more diversified.
+
